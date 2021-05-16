@@ -22,3 +22,8 @@ test-data.json
 
 # Environment Files
 .env
+
+/bin
+
+
+Dockerfile.dev
