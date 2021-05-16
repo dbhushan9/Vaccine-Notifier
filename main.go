@@ -32,7 +32,7 @@ const (
 	feeType                 = "any"
 	telegramMessageTemplate = "templates/telegram-notification.md"
 	emailTemplate           = "templates/email-template.html"
-	indiaLocale             = "Asia/Kolkata"
+	indianLocale            = "Asia/Kolkata"
 )
 
 func main() {
@@ -40,8 +40,8 @@ func main() {
 	log.Print("Starting Vaccine alert worker")
 	// load .env file
 	_ = godotenv.Load(".env")
-	vaccineDate := arrayUtils.GetNextLocaleDay(indiaLocale)
-	gocron.Every(1).Minute().Do(func() { checkForVaccineCenters(vaccineDate, districtId) })
+	vaccineDate := arrayUtils.GetNextLocaleDay(indianLocale)
+	gocron.Every(5).Minute().Do(func() { checkForVaccineCenters(vaccineDate, districtId) })
 	<-gocron.Start()
 	// checkForVaccineCenters(vaccineDate, districtId)
 }
