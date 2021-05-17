@@ -1,5 +1,7 @@
 FROM golang:1.16-alpine AS build
 
+RUN apk --no-cache add tzdata
+
 WORKDIR /app
 
 ENV CGO_ENABLED=0
@@ -20,8 +22,18 @@ ARG TARGETARCH=arm64
 
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH}   go build -o bin/vaccine-alerts
 
+
+FROM scratch AS final
+
+COPY --from=build /app/bin /app/bin
+
+COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+ENV TZ=Asia/Kolkata
+
 # create volume
 VOLUME [ "/app/shared" ]
 
 # set entrypoint
-ENTRYPOINT [ "./bin/vaccine-alerts" ]
+ENTRYPOINT [ "/app/bin/vaccine-alerts" ]
