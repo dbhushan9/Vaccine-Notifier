@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -24,16 +25,20 @@ import (
 var emails = []string{"dbhushan912@gmail.com", "avi6387@gmail.com", "deshmukh.kalyani81@gmail.com", "rupadeshmukh26@gmail.com"}
 
 const (
-	districtId              = 363
-	ageSlot18               = 18
-	ageSlot45               = 45
-	blockName               = "Haveli"
-	vaccine                 = "any"
-	feeType                 = "any"
-	telegramMessageTemplate = "templates/telegram-notification.md"
-	emailTemplate           = "templates/email-template.html"
-	indianLocale            = "Asia/Kolkata"
+	districtId   = 363
+	ageSlot18    = 18
+	ageSlot45    = 45
+	blockName    = "Haveli"
+	vaccine      = "any"
+	feeType      = "any"
+	indianLocale = "Asia/Kolkata"
 )
+
+//go:embed "templates/telegram-notification.md"
+var telegramMsgTemplate string
+
+//go:embed "templates/email-template.html"
+var emailTemplate string
 
 func main() {
 	// setLoggingConfig()
@@ -101,7 +106,7 @@ func checkForVaccineCenters(vaccineDate string, districtId int) {
 	logJSON, _ := json.MarshalIndent(centerLogs, "", " ")
 
 	if len(*cd18) > 0 || len(*cd45) > 0 {
-		msg := renderTemplate(centerLogs, vaccineDate, telegramMessageTemplate)
+		msg := renderTemplate(centerLogs, vaccineDate, telegramMsgTemplate)
 		bot.SendTelegramMessage(msg, true)
 
 		msg = fmt.Sprintf("%v - Found Available centers for %v", time.Now().Format("01-02-2006 15:04:05"), vaccineDate)
@@ -111,6 +116,7 @@ func checkForVaccineCenters(vaccineDate string, districtId int) {
 		// for _, mail := range emails {
 		// 	sendMail(emailMsg, "User", mail)
 		// }
+
 		log.Printf("Centers Available")
 		_ = ioutil.WriteFile(fmt.Sprintf("%v-centers-%v.json", vaccineDate, time.Now().Format("01-02-2006-15-04-05")), logJSON, 0644)
 	} else {
@@ -120,7 +126,7 @@ func checkForVaccineCenters(vaccineDate string, districtId int) {
 	}
 }
 
-func renderTemplate(centers types.LogDetails, vaccineDate string, templateName string) string {
+func renderTemplate(centers types.LogDetails, vaccineDate string, templateString string) string {
 	student := struct {
 		Date           string
 		TotalCenters45 int
@@ -132,7 +138,12 @@ func renderTemplate(centers types.LogDetails, vaccineDate string, templateName s
 		TotalCenters18: len(centers.Age18),
 		CenterDetails:  centers,
 	}
-	parsedTemplate, _ := template.ParseFiles(templateName)
+
+	parsedTemplate, err := template.New("msg-template").Parse(templateString)
+	if err != nil {
+		panic(err)
+	}
+
 	var templateBytes strings.Builder
 	_ = parsedTemplate.Execute(&templateBytes, student)
 	return templateBytes.String()
