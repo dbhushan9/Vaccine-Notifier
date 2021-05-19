@@ -5,11 +5,6 @@ RUN apk --no-cache add tzdata
 WORKDIR /app
 
 ENV CGO_ENABLED=0
-ENV APIKEY_SENDGRID
-ENV SENDER_EMAIL
-ENV APIKEY_TELEGRAM_BOT
-ENV TELEGRAM_CHANNEL_ID_VACCINE_ALERT
-ENV TELEGRAM_CHANNEL_ID_VACCINE_ALERT_DEBUG
 
 ADD go.mod go.sum . 
 
@@ -31,6 +26,12 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 ENV TZ=Asia/Kolkata
+
+ARG APIKEY_SENDGRID
+ARG SENDER_EMAIL
+ARG APIKEY_TELEGRAM_BOT
+ARG TELEGRAM_CHANNEL_ID_VACCINE_ALERT
+ARG TELEGRAM_CHANNEL_ID_VACCINE_ALERT_DEBUG
 
 # create volume
 VOLUME [ "/app/shared" ]
