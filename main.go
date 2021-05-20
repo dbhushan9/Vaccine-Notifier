@@ -6,19 +6,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"text/template"
 	"time"
 
-	"dbhushan9/vaccine-alerts/bot"
-	"dbhushan9/vaccine-alerts/types"
-	arrayUtils "dbhushan9/vaccine-alerts/util"
+	"dbhushan9/vaccine-alerts/cowin"
+	"dbhushan9/vaccine-alerts/notifier"
 
 	"github.com/jasonlvhit/gocron"
-	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
 const (
@@ -34,13 +30,14 @@ var emailTemplate string
 func main() {
 	// setLoggingConfig()
 	log.Print("Starting Vaccine alert worker")
-	// load .env file
-	vaccineDate := arrayUtils.GetNextLocaleDay(indianLocale)
+	vaccineDate := GetNextLocaleDay(indianLocale)
 	ageSlots := [2]int{18, 45}
 	districtId := 363
 	blockName := "Haveli"
 	vaccine := "any"
 	feeType := "any"
+	//ARMY ONLY CENTERS
+	excludedCenter := []int{619964, 629727}
 
 	channelID := os.Getenv("TELEGRAM_CHANNEL_ID_VACCINE_ALERT")
 	debugChannelID := os.Getenv("TELEGRAM_CHANNEL_ID_VACCINE_ALERT_DEBUG")
@@ -50,93 +47,51 @@ func main() {
 	//notificationOptions
 	//vaccineSearchOptions
 	gocron.Every(5).Minute().Do(func() {
-		checkForVaccineCenters(vaccineDate, districtId, ageSlots, blockName, vaccine, feeType, channelID, debugChannelID, emails)
+		checkForVaccineCenters(vaccineDate, districtId, ageSlots, blockName, vaccine, feeType, channelID, debugChannelID, emails, excludedCenter)
 	})
 	<-gocron.Start()
 	// checkForVaccineCenters(vaccineDate, districtId)
 }
 
-func sendMail(msg string, name string, email string) {
-	from := mail.NewEmail("Vaccine Alerts", os.Getenv("SENDER_EMAIL"))
-	subject := "Found Vaccine matching your criteria"
-	to := mail.NewEmail(name, email)
-	message := mail.NewSingleEmail(from, subject, to, "", msg)
-	client := sendgrid.NewSendClient(os.Getenv("APIKEY_SENDGRID"))
-	_, err := client.Send(message)
-	if err != nil {
-		log.Println(err)
-	} else {
-		log.Printf("Sent Email to %v", email)
-	}
-}
-
-func checkForVaccineCenters(vaccineDate string, districtId int, ageSlots [2]int, blockName string, vaccine string, feeType string, channelID string, debugChannelID string, emails []string) {
+func checkForVaccineCenters(vaccineDate string, districtId int, ageSlots [2]int, blockName string, vaccine string, feeType string, channelID string, debugChannelID string, emails []string, excludedCenter []int) {
 	log.Printf("Checking for Vaccine Centers for date: %v districtId:%d", vaccineDate, districtId)
-	client := &http.Client{}
-	url := fmt.Sprintf("https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict?date=%v&district_id=%d", vaccineDate, districtId)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		log.Print("Could not create Http request")
-		log.Print(err.Error())
-	}
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Accept-Language", "hi_IN")
-	req.Header.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36")
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("Error making request to %v", url)
-		log.Print(err.Error())
-	}
 
-	defer resp.Body.Close()
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Print("Error reading request body")
-		log.Print(err.Error())
-	}
-
-	var response types.ReponseType
-	err = json.Unmarshal(bodyBytes, &response)
+	response, err := cowin.QueryCowinAPI(vaccineDate, districtId)
 	if err != nil {
 		log.Print("Error unmarshalling request body")
 		log.Print(err.Error())
 	}
+
 	log.Printf("Total centers are %v", len(response.Centers))
 
-	_, cd18 := types.ProcessCentersPresent(response.Centers, ageSlots[0], vaccine, feeType, vaccineDate, blockName)
-	_, cd45 := types.ProcessCentersPresent(response.Centers, ageSlots[1], vaccine, feeType, vaccineDate, blockName)
+	_, cd18 := cowin.ProcessCentersPresent(response.Centers, ageSlots[0], vaccine, feeType, vaccineDate, blockName, excludedCenter)
+	_, cd45 := cowin.ProcessCentersPresent(response.Centers, ageSlots[1], vaccine, feeType, vaccineDate, blockName, excludedCenter)
 
-	centerLogs := types.LogDetails{Age18: *cd18, Age45: *cd45}
+	centerLogs := cowin.CentersByAge{Age18: *cd18, Age45: *cd45}
 	logJSON, _ := json.MarshalIndent(centerLogs, "", " ")
 
 	if len(*cd18) > 0 || len(*cd45) > 0 {
 		msg := renderTemplate(centerLogs, vaccineDate, telegramMsgTemplate)
-		bot.SendTelegramMessage(msg, true, channelID)
+		notifier.SendTelegramNotification(msg, true, channelID)
 
 		msg = fmt.Sprintf("%v - Found Available centers for %v", time.Now().Format("01-02-2006 15:04:05"), vaccineDate)
-		bot.SendTelegramMessage(msg, false, debugChannelID)
-
-		// emailMsg := renderTemplate(centerLogs, vaccineDate, emailTemplate)
-		// for _, mail := range emails {
-		// 	sendMail(emailMsg, "User", mail)
-		// }
+		notifier.SendTelegramNotification(msg, false, debugChannelID)
 
 		log.Printf("Centers Available")
 		_ = ioutil.WriteFile(fmt.Sprintf("%v-centers-%v.json", vaccineDate, time.Now().Format("01-02-2006-15-04-05")), logJSON, 0644)
 	} else {
 		msg := fmt.Sprintf("%v - No Available centers for %v", time.Now().Format("01-02-2006 15:04:05"), vaccineDate)
-		bot.SendTelegramMessage(msg, false, debugChannelID)
+		notifier.SendTelegramNotification(msg, false, debugChannelID)
 		log.Print("Centers Not Availabe")
 	}
 }
 
-func renderTemplate(centers types.LogDetails, vaccineDate string, templateString string) string {
-	student := struct {
+func renderTemplate(centers cowin.CentersByAge, vaccineDate string, templateString string) string {
+	vaccineData := struct {
 		Date           string
 		TotalCenters45 int
 		TotalCenters18 int
-		CenterDetails  types.LogDetails
+		CenterDetails  cowin.CentersByAge
 	}{
 		Date:           vaccineDate,
 		TotalCenters45: len(centers.Age45),
@@ -150,8 +105,15 @@ func renderTemplate(centers types.LogDetails, vaccineDate string, templateString
 	}
 
 	var templateBytes strings.Builder
-	_ = parsedTemplate.Execute(&templateBytes, student)
+	_ = parsedTemplate.Execute(&templateBytes, vaccineData)
 	return templateBytes.String()
+}
+
+func sendEmailNotifications(centers cowin.CentersByAge, vaccineDate string, emails []string) {
+	emailMsg := renderTemplate(centers, vaccineDate, emailTemplate)
+	for _, mail := range emails {
+		notifier.SendMail(emailMsg, "User", mail)
+	}
 }
 
 func setLoggingConfig() {
@@ -164,4 +126,12 @@ func setLoggingConfig() {
 	log.SetOutput(file)
 	log.Print("Logging to a file in Go!")
 
+}
+
+func GetNextLocaleDay(locale string) string {
+	loc, _ := time.LoadLocation(locale)
+	now := time.Now().In(loc)
+	now = now.AddDate(0, 0, 1)
+	tomorrowDateIST := now.Format("02-01-2006")
+	return tomorrowDateIST
 }
