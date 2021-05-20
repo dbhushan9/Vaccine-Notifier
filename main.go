@@ -17,20 +17,11 @@ import (
 	arrayUtils "dbhushan9/vaccine-alerts/util"
 
 	"github.com/jasonlvhit/gocron"
-	"github.com/joho/godotenv"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
-var emails = []string{"dbhushan912@gmail.com", "avi6387@gmail.com", "deshmukh.kalyani81@gmail.com", "rupadeshmukh26@gmail.com"}
-
 const (
-	districtId   = 363
-	ageSlot18    = 18
-	ageSlot45    = 45
-	blockName    = "Haveli"
-	vaccine      = "any"
-	feeType      = "any"
 	indianLocale = "Asia/Kolkata"
 )
 
@@ -44,9 +35,23 @@ func main() {
 	// setLoggingConfig()
 	log.Print("Starting Vaccine alert worker")
 	// load .env file
-	_ = godotenv.Load(".env")
 	vaccineDate := arrayUtils.GetNextLocaleDay(indianLocale)
-	gocron.Every(5).Minute().Do(func() { checkForVaccineCenters(vaccineDate, districtId) })
+	ageSlots := [2]int{18, 45}
+	districtId := 363
+	blockName := "Haveli"
+	vaccine := "any"
+	feeType := "any"
+
+	channelID := os.Getenv("TELEGRAM_CHANNEL_ID_VACCINE_ALERT")
+	debugChannelID := os.Getenv("TELEGRAM_CHANNEL_ID_VACCINE_ALERT_DEBUG")
+
+	var emails = []string{"dbhushan912@gmail.com", "avi6387@gmail.com", "deshmukh.kalyani81@gmail.com", "rupadeshmukh26@gmail.com"}
+
+	//notificationOptions
+	//vaccineSearchOptions
+	gocron.Every(5).Minute().Do(func() {
+		checkForVaccineCenters(vaccineDate, districtId, ageSlots, blockName, vaccine, feeType, channelID, debugChannelID, emails)
+	})
 	<-gocron.Start()
 	// checkForVaccineCenters(vaccineDate, districtId)
 }
@@ -65,7 +70,7 @@ func sendMail(msg string, name string, email string) {
 	}
 }
 
-func checkForVaccineCenters(vaccineDate string, districtId int) {
+func checkForVaccineCenters(vaccineDate string, districtId int, ageSlots [2]int, blockName string, vaccine string, feeType string, channelID string, debugChannelID string, emails []string) {
 	log.Printf("Checking for Vaccine Centers for date: %v districtId:%d", vaccineDate, districtId)
 	client := &http.Client{}
 	url := fmt.Sprintf("https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict?date=%v&district_id=%d", vaccineDate, districtId)
@@ -99,18 +104,18 @@ func checkForVaccineCenters(vaccineDate string, districtId int) {
 	}
 	log.Printf("Total centers are %v", len(response.Centers))
 
-	_, cd18 := types.ProcessCentersPresent(response.Centers, ageSlot18, vaccine, feeType, vaccineDate, blockName)
-	_, cd45 := types.ProcessCentersPresent(response.Centers, ageSlot45, vaccine, feeType, vaccineDate, blockName)
+	_, cd18 := types.ProcessCentersPresent(response.Centers, ageSlots[0], vaccine, feeType, vaccineDate, blockName)
+	_, cd45 := types.ProcessCentersPresent(response.Centers, ageSlots[1], vaccine, feeType, vaccineDate, blockName)
 
 	centerLogs := types.LogDetails{Age18: *cd18, Age45: *cd45}
 	logJSON, _ := json.MarshalIndent(centerLogs, "", " ")
 
 	if len(*cd18) > 0 || len(*cd45) > 0 {
 		msg := renderTemplate(centerLogs, vaccineDate, telegramMsgTemplate)
-		bot.SendTelegramMessage(msg, true)
+		bot.SendTelegramMessage(msg, true, channelID)
 
 		msg = fmt.Sprintf("%v - Found Available centers for %v", time.Now().Format("01-02-2006 15:04:05"), vaccineDate)
-		bot.SendTelegramMessage(msg, false)
+		bot.SendTelegramMessage(msg, false, debugChannelID)
 
 		// emailMsg := renderTemplate(centerLogs, vaccineDate, emailTemplate)
 		// for _, mail := range emails {
@@ -121,7 +126,7 @@ func checkForVaccineCenters(vaccineDate string, districtId int) {
 		_ = ioutil.WriteFile(fmt.Sprintf("%v-centers-%v.json", vaccineDate, time.Now().Format("01-02-2006-15-04-05")), logJSON, 0644)
 	} else {
 		msg := fmt.Sprintf("%v - No Available centers for %v", time.Now().Format("01-02-2006 15:04:05"), vaccineDate)
-		bot.SendTelegramMessage(msg, false)
+		bot.SendTelegramMessage(msg, false, debugChannelID)
 		log.Print("Centers Not Availabe")
 	}
 }

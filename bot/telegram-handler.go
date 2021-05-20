@@ -9,13 +9,12 @@ import (
 	"os"
 )
 
-func SendTelegramMessage(msg string, isParseMode bool) {
+func SendTelegramMessage(msg string, isParseMode bool, channelID string) {
 	log.Print("Sending Telegram Message")
 	apiKey := os.Getenv("APIKEY_TELEGRAM_BOT")
 	url := fmt.Sprintf("https://api.telegram.org/bot%v/sendMessage", apiKey)
 
-	requestBody := createRequestBody(msg, isParseMode)
-
+	requestBody := createRequestBody(msg, isParseMode, channelID)
 	_, err := http.Post(url, "application/json", requestBody)
 	if err != nil {
 		log.Print(err.Error())
@@ -24,17 +23,17 @@ func SendTelegramMessage(msg string, isParseMode bool) {
 	log.Print("Telegram message sent to channel")
 }
 
-func createRequestBody(msg string, isParseMode bool) *bytes.Buffer {
+func createRequestBody(msg string, isParseMode bool, channelID string) *bytes.Buffer {
 	var postBody []byte
 	if isParseMode {
 		postBody, _ = json.Marshal(map[string]string{
-			"chat_id":    os.Getenv("TELEGRAM_CHANNEL_ID_VACCINE_ALERT"),
+			"chat_id":    channelID,
 			"text":       msg,
 			"parse_mode": "MarkdownV2",
 		})
 	} else {
 		postBody, _ = json.Marshal(map[string]string{
-			"chat_id": os.Getenv("TELEGRAM_CHANNEL_ID_VACCINE_ALERT_DEBUG"),
+			"chat_id": channelID,
 			"text":    msg,
 		})
 	}
