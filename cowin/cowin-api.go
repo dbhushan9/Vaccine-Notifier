@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func QueryCowinAPI(vaccineDate string, districtId int) (*CowinAPIResponse, error) {
@@ -13,8 +14,7 @@ func QueryCowinAPI(vaccineDate string, districtId int) (*CowinAPIResponse, error
 	url := fmt.Sprintf("https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict?date=%v&district_id=%d", vaccineDate, districtId)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Print("Could not create Http request")
-		log.Print(err.Error())
+		log.WithFields(log.Fields{"error": err}).Error("could not create http request")
 	}
 
 	req.Header.Add("Accept", "application/json")
@@ -24,14 +24,12 @@ func QueryCowinAPI(vaccineDate string, districtId int) (*CowinAPIResponse, error
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Error making request to %v", url)
-		log.Print(err.Error())
+		log.WithFields(log.Fields{"error": err}).Error("error making request to", url)
 	}
 	defer resp.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Print("Error reading response body")
-		log.Print(err.Error())
+		log.WithFields(log.Fields{"error": err}).Error("error reading response body")
 	}
 
 	var response CowinAPIResponse

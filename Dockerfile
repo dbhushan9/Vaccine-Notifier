@@ -17,10 +17,11 @@ ARG TARGETARCH=arm64
 
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH}   go build -o bin/vaccine-alerts
 
+RUN chmod 700 bin/vaccine-alerts
 
 FROM scratch AS final
 
-COPY --from=build /app/bin /app/bin
+COPY --from=build /app/bin /app
 
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
@@ -37,4 +38,4 @@ ARG TELEGRAM_CHANNEL_ID_VACCINE_ALERT_DEBUG
 VOLUME [ "/app/shared" ]
 
 # set entrypoint
-ENTRYPOINT [ "/app/bin/vaccine-alerts" ]
+ENTRYPOINT [ "/app/vaccine-alerts" ]

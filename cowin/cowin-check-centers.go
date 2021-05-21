@@ -1,6 +1,6 @@
 package cowin
 
-import "log"
+import log "github.com/sirupsen/logrus"
 
 type CentersByAge struct {
 	Age18 []CenterDetails `json:"age18"`
@@ -31,7 +31,7 @@ func ProcessCentersPresent(centers VaccineCenters, ageSlot int, vaccine string, 
 
 func isValidCenter(center VaccineCenter, ageSlot int, vaccine string, feeType string, date string, blockName string, excludedCenter []int) bool {
 	if (blockName != "any" && center.BlockName != blockName) || includes(excludedCenter, int(center.CenterId)) {
-		log.Printf("Skipping center %v %v %v", center.CenterId, center.Name, center.BlockName)
+		log.WithFields(log.Fields{"center": center}).Info("Skipping center")
 		return false
 	}
 	validSessions := []Session{}
