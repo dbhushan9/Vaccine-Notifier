@@ -14,6 +14,7 @@ import (
 
 	"github.com/jasonlvhit/gocron"
 	log "github.com/sirupsen/logrus"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -34,25 +35,20 @@ func init() {
 			log.FieldKeyMsg:  "message",
 		},
 	})
-	// err := os.Mkdir("shared", 0666)
-	// log.WithFields(log.Fields{"error": err}).Error("failed to create shared directory")
-	file, err := os.OpenFile("/app/shared/out.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.WithFields(log.Fields{"error": err}).Error("failed to create log file")
+	log.SetReportCaller(true)
 
-	}
-	log.SetOutput(file)
-
-	// defer file.Close()
-	log.SetOutput(file)
-	log.Info("completed logging init")
+	log.SetOutput(&lumberjack.Logger{
+		Filename:   "/app/shared/out.log",
+		MaxSize:    1, // megabytes
+		MaxBackups: 3,
+		MaxAge:     2,    //days
+		Compress:   true, // disabled by default
+	})
 }
 
 func main() {
-	// setLoggingConfig()
-	log.Info("Starting Vaccine alert worker")
+	log.Info("starting vaccine alert worker")
 	date := GetNextLocaleDay(indianLocale)
-	// ageSlots := [2]int{18, 45}
 	ageSlots2 := []int{18, 45}
 	districtId := 363
 	blockName := "Haveli"
@@ -63,7 +59,7 @@ func main() {
 
 	channelID := os.Getenv("TELEGRAM_CHANNEL_ID_VACCINE_ALERT")
 	debugChannelID := os.Getenv("TELEGRAM_CHANNEL_ID_VACCINE_ALERT_DEBUG")
-	var emails = []string{"dbhushan912@gmail.com", "avi6387@gmail.com", "deshmukh.kalyani81@gmail.com", "rupadeshmukh26@gmail.com"}
+	var emails = []string{"dbhushan912@gmail.com"}
 
 	query := &config.VaccineQuery{
 		CenterOptions: config.CenterOptions{
@@ -87,19 +83,18 @@ func main() {
 		sendNotification(query.NotificationOptions, *centersByAge, query.CenterOptions.Date)
 	})
 	<-gocron.Start()
-	// checkForVaccineCenters(vaccineDate, districtId)
 }
 
 //TODO: send error if failed inbetween and send debug mail accordingly
 func checkForVaccineCenters(centerOptions config.CenterOptions) *cowin.CentersByAge {
-	log.WithFields(log.Fields{"centerOptions": centerOptions}).Info("checking for vaccine centers")
+	log.WithFields(log.Fields{"center_criteria": centerOptions}).Info("checking for vaccine centers")
 
 	response, err := cowin.QueryCowinAPI(centerOptions.Date, centerOptions.DistrictId)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err}).Error("error unmarshalling request body")
 	}
 
-	log.Info("Total centers are", len(response.Centers))
+	log.WithFields(log.Fields{"center_count": len(response.Centers)}).Info("found centers")
 
 	//TODO: call process only once, return response by groupBy
 	_, cd18 := cowin.ProcessCentersPresent(response.Centers, centerOptions.AgeSlots[0], centerOptions.Vaccine, centerOptions.FeeType, centerOptions.Date, centerOptions.BlockName, centerOptions.ExcludedCenterIds)
@@ -126,18 +121,18 @@ func sendNotification(options config.NotificationOptions, centersByAge cowin.Cen
 			notifier.SendTelegramNotification(msg, true, channelID)
 		}
 
-		msg = fmt.Sprintf("%v - Found Available centers for %v", time.Now().Format("01-02-2006 15:04:05"), date)
+		msg = fmt.Sprintf("%v - Found available centers for %v", getCurrentTime(), date)
 		for _, debugChannelID := range options.DebugTelegramChannels {
 			notifier.SendTelegramNotification(msg, false, debugChannelID)
 		}
-		log.Info("Centers Available")
+		log.Info("found vaccine centers")
 
 	} else {
-		msg := fmt.Sprintf("%v - No Available centers for %v", time.Now().Format("01-02-2006 15:04:05"), date)
+		msg := fmt.Sprintf("%v - No available centers for %v", getCurrentTime(), date)
 		for _, debugChannelID := range options.DebugTelegramChannels {
 			notifier.SendTelegramNotification(msg, false, debugChannelID)
 		}
-		log.Info("Centers Not Availabe")
+		log.Info("no vaccine centers found")
 	}
 }
 
@@ -171,14 +166,14 @@ func sendEmailNotifications(centers cowin.CentersByAge, vaccineDate string, emai
 	}
 }
 
-func setLoggingConfig() {
-
-}
-
 func GetNextLocaleDay(locale string) string {
 	loc, _ := time.LoadLocation(locale)
 	now := time.Now().In(loc)
 	now = now.AddDate(0, 0, 1)
 	tomorrowDateIST := now.Format("02-01-2006")
 	return tomorrowDateIST
+}
+
+func getCurrentTime() string {
+	return time.Now().Format("01-02-2006 15:04:05")
 }

@@ -24,12 +24,12 @@ func QueryCowinAPI(vaccineDate string, districtId int) (*CowinAPIResponse, error
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.WithFields(log.Fields{"error": err}).Error("error making request to", url)
+		log.WithFields(log.Fields{"error": err, "request_url": url}).Error("error making http request")
 	}
 	defer resp.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.WithFields(log.Fields{"error": err}).Error("error reading response body")
+		log.WithFields(log.Fields{"error": err}).Error("error reading http response body")
 	}
 
 	var response CowinAPIResponse

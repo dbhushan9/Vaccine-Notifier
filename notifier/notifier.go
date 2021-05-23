@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 
@@ -22,24 +23,37 @@ func SendMail(msg string, name string, email string) {
 	client := sendgrid.NewSendClient(os.Getenv("APIKEY_SENDGRID"))
 	_, err := client.Send(message)
 	if err != nil {
-		log.WithFields(log.Fields{"error": err}).Error("error sending email to", email)
+		log.WithFields(log.Fields{"error": err, "email": email}).Error("error sending email")
 	}
-	log.Info("sent email to ", email)
+	log.WithFields(log.Fields{"email": email}).Info("email sent")
 
 }
 
 func SendTelegramNotification(msg string, isParseMode bool, channelID string) {
-	log.Info("sending telegram message")
 	apiKey := os.Getenv("APIKEY_TELEGRAM_BOT")
+	log.WithFields(log.Fields{"channelID": channelID, "bot_token": apiKey, "msg": msg}).Info("sending telegram message")
 	url := fmt.Sprintf("https://api.telegram.org/bot%v/sendMessage", apiKey)
 
 	requestBody := createTelegramRequestBody(msg, isParseMode, channelID)
-	_, err := http.Post(url, "application/json", requestBody)
+	resp, err := http.Post(url, "application/json", requestBody)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err}).Error("error sending telegram message")
 	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.WithFields(log.Fields{"error": err}).Error("error reading body")
+	}
+
+	var data interface{}
+	json.Unmarshal(body, data)
 	//TODO: check response status
-	log.Info("telegram message sent")
+	if resp.StatusCode == 200 {
+		log.WithFields(log.Fields{"response_status": resp.StatusCode, "response_body": body}).Info("telegram message sent")
+	} else {
+		log.WithFields(log.Fields{"response_status": resp.StatusCode, "response_body": body}).Info("error sending telegram message")
+	}
 }
 
 func createTelegramRequestBody(msg string, isParseMode bool, channelID string) *bytes.Buffer {
@@ -56,6 +70,5 @@ func createTelegramRequestBody(msg string, isParseMode bool, channelID string) *
 			"text":    msg,
 		})
 	}
-
 	return bytes.NewBuffer(postBody)
 }
