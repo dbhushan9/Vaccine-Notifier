@@ -79,6 +79,7 @@ func main() {
 	}
 
 	gocron.Every(5).Minute().Do(func() {
+		defer ExecutionTimeTaken(time.Now(), "cronjob")
 		centersByAge := checkForVaccineCenters(query.CenterOptions)
 		sendNotification(query.NotificationOptions, *centersByAge, query.CenterOptions.Date)
 	})
@@ -87,6 +88,7 @@ func main() {
 
 //TODO: send error if failed inbetween and send debug mail accordingly
 func checkForVaccineCenters(centerOptions config.CenterOptions) *cowin.CentersByAge {
+	defer ExecutionTimeTaken(time.Now(), "checkForVaccineCenters")
 	log.WithFields(log.Fields{"center_criteria": centerOptions}).Info("checking for vaccine centers")
 
 	response, err := cowin.QueryCowinAPI(centerOptions.Date, centerOptions.DistrictId)
@@ -107,6 +109,7 @@ func checkForVaccineCenters(centerOptions config.CenterOptions) *cowin.CentersBy
 }
 
 func sendNotification(options config.NotificationOptions, centersByAge cowin.CentersByAge, date string) {
+	defer ExecutionTimeTaken(time.Now(), "sendNotification")
 	//TODO:
 	//Send Telegram Success Message
 	//Send Telegram Debug success Message
@@ -176,4 +179,12 @@ func GetNextLocaleDay(locale string) string {
 
 func getCurrentTime() string {
 	return time.Now().Format("01-02-2006 15:04:05")
+}
+
+func ExecutionTimeTaken(t time.Time, n string) {
+	e := time.Since(t)
+	log.WithFields(log.Fields{
+		"execution_time": e,
+		"function_name":  n,
+	}).Info("measured execution time")
 }
