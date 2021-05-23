@@ -8,9 +8,10 @@ type CentersByAge struct {
 }
 
 type CenterDetails struct {
-	Name              string  `json:"centerName"`
+	Name              string  `json:"center_name"`
+	Pincode           int     `json:"district_id"`
 	Date              string  `json:"date"`
-	AvailableCapacity float32 `json:"availableCapacity"`
+	AvailableCapacity float32 `json:"available_capacity"`
 	FeeType           string  `json:"fees"`
 	Vaccine           string  `json:"vaccine"`
 }
@@ -23,7 +24,7 @@ func ProcessCentersPresent(centers VaccineCenters, ageSlot int, vaccine string, 
 		if isValidCenter(center, ageSlot, vaccine, feeType, date, blockName, excludedCenter) {
 			validCenters = append(validCenters, center)
 			session := center.Sessions[0]
-			centerData = append(centerData, CenterDetails{Name: center.Name, Date: session.Date, AvailableCapacity: session.AvailableCapacity, FeeType: string(center.FeeType), Vaccine: session.Vaccine})
+			centerData = append(centerData, CenterDetails{Name: center.Name, Pincode: center.Pincode, Date: session.Date, AvailableCapacity: session.AvailableCapacity, FeeType: string(center.FeeType), Vaccine: session.Vaccine})
 		}
 	}
 	return &validCenters, &centerData

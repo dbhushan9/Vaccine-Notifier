@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 
@@ -29,7 +29,9 @@ func SendMail(msg string, name string, email string) {
 
 }
 
-func SendTelegramNotification(msg string, isParseMode bool, channelID string) {
+func SendTelegramNotification(msg string, isParseMode bool, channelID string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	apiKey := os.Getenv("APIKEY_TELEGRAM_BOT")
 	log.WithFields(log.Fields{"channelID": channelID, "bot_token": apiKey, "msg": msg}).Info("sending telegram message")
 	url := fmt.Sprintf("https://api.telegram.org/bot%v/sendMessage", apiKey)
@@ -40,19 +42,10 @@ func SendTelegramNotification(msg string, isParseMode bool, channelID string) {
 		log.WithFields(log.Fields{"error": err}).Error("error sending telegram message")
 	}
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.WithFields(log.Fields{"error": err}).Error("error reading body")
-	}
-
-	var data interface{}
-	json.Unmarshal(body, data)
-	//TODO: check response status
 	if resp.StatusCode == 200 {
-		log.WithFields(log.Fields{"response_status": resp.StatusCode, "response_body": body}).Info("telegram message sent")
+		log.WithFields(log.Fields{"response_status": resp.StatusCode}).Info("telegram message sent")
 	} else {
-		log.WithFields(log.Fields{"response_status": resp.StatusCode, "response_body": body}).Info("error sending telegram message")
+		log.WithFields(log.Fields{"response_status": resp.StatusCode}).Info("error sending telegram message")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -39,7 +40,7 @@ func init() {
 
 	log.SetOutput(&lumberjack.Logger{
 		Filename:   "/app/shared/out.log",
-		MaxSize:    1, // megabytes
+		MaxSize:    5, // megabytes
 		MaxBackups: 3,
 		MaxAge:     2,    //days
 		Compress:   true, // disabled by default
@@ -116,25 +117,29 @@ func sendNotification(options config.NotificationOptions, centersByAge cowin.Cen
 	//Send Sucess Email
 
 	//Send Telegram Debug failure Message
-
+	var wg sync.WaitGroup
 	if len(centersByAge.Age18) > 0 || len(centersByAge.Age45) > 0 {
+
+		wg.Add(len(options.TelegramChannels) + len(options.DebugTelegramChannels))
 		//TODO: send a single message with grouped values
 		msg := renderTemplate(centersByAge, date, telegramMsgTemplate)
 		for _, channelID := range options.TelegramChannels {
-			notifier.SendTelegramNotification(msg, true, channelID)
+			notifier.SendTelegramNotification(msg, true, channelID, &wg)
 		}
 
 		msg = fmt.Sprintf("%v - Found available centers for %v", getCurrentTime(), date)
 		for _, debugChannelID := range options.DebugTelegramChannels {
-			notifier.SendTelegramNotification(msg, false, debugChannelID)
+			notifier.SendTelegramNotification(msg, false, debugChannelID, &wg)
 		}
+		wg.Wait()
 		log.Info("found vaccine centers")
-
 	} else {
+		wg.Add(len(options.DebugTelegramChannels))
 		msg := fmt.Sprintf("%v - No available centers for %v", getCurrentTime(), date)
 		for _, debugChannelID := range options.DebugTelegramChannels {
-			notifier.SendTelegramNotification(msg, false, debugChannelID)
+			notifier.SendTelegramNotification(msg, false, debugChannelID, &wg)
 		}
+		wg.Wait()
 		log.Info("no vaccine centers found")
 	}
 }
